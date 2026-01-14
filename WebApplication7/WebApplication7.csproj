@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenSleigh.InMemory" Version="3.1.0" />
+    <PackageReference Include="OpenSleigh" Version="3.1.0" />
+    <PackageReference Include="OpenSleigh.Persistence.SQL" Version="3.1.0" />
+    <PackageReference Include="OpenSleigh.Persistence.SQLServer" Version="3.1.0" />
+  </ItemGroup>
+
+</Project>

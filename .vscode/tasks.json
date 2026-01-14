@@ -1,0 +1,100 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"build",
+				"${workspaceFolder}/GofFabric.sln",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:\"NoSummary;ForceNoAlign\""
+			],
+			"problemMatcher": "$msCompile",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "publish",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"publish",
+				"${workspaceFolder}/GofFabric.sln",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:\"NoSummary;ForceNoAlign\""
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "watch",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"watch",
+				"run",
+				"--project",
+				"${workspaceFolder}/GofFabric.sln"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "csharpier: format current file",
+			"type": "process",
+			"command": "dotnet",
+			"args": [
+				"csharpier",
+				"format",
+				"${file}"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "format: current file",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"csharpier",
+				"format",
+				"${file}"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "csharpier: format repo",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"csharpier",
+				"format",
+				"."
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-shell (deprecated)",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"build",
+				"${workspaceFolder}/GofFabric.sln",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary`;;ForceNoAlign"
+			],
+			"isBackground": false,
+			"problemMatcher": "$msCompile",
+			"group": "none"
+		}
+	]
+}

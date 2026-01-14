@@ -1,0 +1,137 @@
+{
+  "cSpell.words": ["Wechat"],
+  "cSpell.enabledFileTypes": {
+    "csharp": false
+  },
+  // 关闭搜索替换时的对比预览，只打开源文件
+  "search.useReplacePreview": false,
+  // 自动保存：当文件有更改后在短暂延迟后自动保存
+  "files.autoSave": "afterDelay",
+  // 自动保存延迟（毫秒）。可根据个人习惯调整，例如 300~1500。
+  "files.autoSaveDelay": 500,
+  "[csharp]": {
+    // 使用 CSharpier 作为 C# 的默认格式化器
+    "editor.defaultFormatter": "csharpier.csharpier-vscode",
+    // 启用保存自动格式化
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "editor.formatOnPaste": true,
+    // 保留 C# 扩展的 organizeImports（不影响 CSharpier）
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "[xml]": {
+    "editor.defaultFormatter": "csharpier.csharpier-vscode"
+  },
+  // 让 CSharpier 读取仓库根目录的 .csharpier.json（优先级高于下方 VS Code 设置）
+  // 这里不再强制 VS Code 层的 CSharpier 参数，避免与 .csharpier.json 冲突
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "dist/": true,
+    "build/": true,
+    "temp/": true,
+    "library/": true,
+    "**/*.anim": true,
+    "**/*.unity": true,
+    "**/*.prefab": true,
+    "**/*.cs.meta": true,
+    "**/*.js.meta": true,
+    "**/*.shader.meta": true,
+    "**/*.mat.meta": true,
+    "**/*.asset.meta": true,
+    "**/*.controller.meta": true,
+    "**/*.prefab.meta": true,
+    "**/*.unity.meta": true,
+    "**/*.dll": true,
+    "**/*.exe": true,
+    "**/*.pdb": true,
+    "**/*.mdb": true,
+    "**/*.so": true,
+    "**/*.dylib": true,
+    "**/*.lib": true,
+    "**/*.a": true,
+    "**/*.apk": true,
+    "**/*.unitypackage": true,
+    "**/*.zip": true,
+    "**/*.rar": true,
+    "**/*.tar": true,
+    "**/*.gz": true,
+    "**/*.7z": true,
+    "**/*.tar.gz": true,
+    "**/*.tar.bz2": true,
+    "**/*.tar.xz": true,
+    "**/*.tar.lz": true,
+    "**/*.tar.lzo": true,
+    "**/*.tar.lzma": true,
+    "**/*.tar.lz4": true,
+    "**/*.tar.zst": true,
+    "**/*.tar.zstd": true,
+    "**/*.tar.lzop": true,
+    "**/bin": true,
+    "**/obj": true,
+    "local/": true,
+    // .NET 相关新增
+    "**/.vs": true,
+    "**/nupkgs": true,
+    "**/packages": true,
+    "**/.nuget": true,
+    "**/TestResults": true,
+    "**/*.log": true,
+    "**/*.user": true,
+    "**/*.suo": true,
+    "**/.logs": true,
+    "**/logs": true,
+    "GofFabricDbContext.ShareSpecific/Data": true,
+    "**/publish": true,
+    "**/publish/**": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/*.meta": true,
+    "library/": true,
+    "local/": true,
+    "temp/": true,
+    "**/obj": true,
+    "**/bin": true,
+    "build/": true,
+    "dist/": true,
+    // .NET 相关新增
+    "**/.vs": true,
+    "**/nupkgs": true,
+    "**/packages": true,
+    "**/.nuget": true,
+    "**/TestResults": true,
+    "**/*.user": true,
+    "**/*.suo": true,
+    "**/*.sln.docstates": true,
+    "**/*.tmp": true,
+    "**/*.temp": true,
+    "**/Thumbs.db": true,
+    "**/*.log": true,
+    "**/.logs": true,
+    "**/logs": true,
+    "**/*.userosscache": true,
+    "**/publish": true,
+    "**/publish/**": true
+  },
+  "files.watcherExclude": {
+    "**/.vs/**": true,
+    "**/bin/**": true,
+    "**/obj/**": true,
+    "**/nupkgs/**": true,
+    "**/packages/**": true,
+    "**/node_modules/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/TestResults/**": true,
+    "**/library/**": true,
+    "**/temp/**": true,
+    "**/*.log": true,
+    "**/.logs": true,
+    "**/logs": true,
+    "**/publish/**": true
+  }
+}
