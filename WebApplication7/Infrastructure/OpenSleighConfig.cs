@@ -25,6 +25,7 @@ namespace WebApplication7.Infrastructure
                 var sqlConfiguration = new SqlConfiguration(connectionString);
                 cfg.UseSqlServerPersistence(sqlConfiguration).UseInMemoryTransport();
                 cfg.AddSaga<SagaWithState, MySagaState>();
+                cfg.AddSaga<RefundSaga, RefundSagaState>();
                 cfg.WithOutboxProcessorOptions(OutboxProcessorOptions.Default);
             });
 
