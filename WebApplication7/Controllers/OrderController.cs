@@ -38,7 +38,9 @@ namespace WebApplication7.Controllers
             var message = new StartSaga(orderId);
 
             await _bus.PublishAsync(message, cancellationToken);
-            _logger.LogInformation("order {OrderId} sent to saga", orderId);
+
+            if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation("order {OrderId} sent to saga", orderId);
 
             return Results.Accepted($"/api/order/{orderId}", new { orderId });
         }
@@ -49,8 +51,8 @@ namespace WebApplication7.Controllers
             var correlationId = orderId.ToString("N");
             var sagaTypeName = typeof(SagaWithState).FullName!;
 
-            var entity = await _dbContext.SagaStates
-                .AsNoTracking()
+            var entity = await _dbContext
+                .SagaStates.AsNoTracking()
                 .Include(e => e.ProcessedMessages)
                 .FirstOrDefaultAsync(
                     e => e.CorrelationId == correlationId && e.SagaType == sagaTypeName,
@@ -78,11 +80,11 @@ namespace WebApplication7.Controllers
                         state.Status,
                         state.Foo,
                         state.Bar,
-                        state.LastUpdated
+                        state.LastUpdated,
                     },
-                processedMessages = entity.ProcessedMessages
-                    .OrderBy(pm => pm.When)
-                    .Select(pm => new { pm.MessageId, pm.When })
+                processedMessages = entity
+                    .ProcessedMessages.OrderBy(pm => pm.When)
+                    .Select(pm => new { pm.MessageId, pm.When }),
             };
 
             return Results.Ok(response);
