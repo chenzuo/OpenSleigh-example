@@ -133,5 +133,11 @@
     "**/.logs": true,
     "**/logs": true,
     "**/publish/**": true
+  },
+  "chat.tools.terminal.autoApprove": {
+    "/^cd c:/Users/chenz/source/repos/WebApplication7/WebApplication7; dotnet list package --include-transitive$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
   }
 }

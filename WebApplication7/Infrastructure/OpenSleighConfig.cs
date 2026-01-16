@@ -30,6 +30,7 @@ namespace WebApplication7.Infrastructure
             });
 
             services.AddSingleton<IMessageProcessor, ScopedMessageProcessor>();
+            services.AddScoped<ISagaStateReader, SagaStateReader>();
 
             return services;
         }

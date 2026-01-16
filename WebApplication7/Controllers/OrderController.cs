@@ -1,11 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using OpenSleigh.Persistence.SQL;
 using OpenSleigh.Transport;
-using OpenSleigh.Utils;
 using WebApplication7.Domain.Messages;
 using WebApplication7.Domain.Sagas;
 using WebApplication7.Domain.States;
+using WebApplication7.Infrastructure;
 
 namespace WebApplication7.Controllers
 {
@@ -14,20 +12,17 @@ namespace WebApplication7.Controllers
     public class OrderController : ControllerBase
     {
         private readonly IMessageBus _bus;
-        private readonly SagaDbContext _dbContext;
-        private readonly ISerializer _serializer;
+        private readonly ISagaStateReader _stateReader;
         private readonly ILogger<OrderController> _logger;
 
         public OrderController(
             IMessageBus bus,
-            SagaDbContext dbContext,
-            ISerializer serializer,
+            ISagaStateReader stateReader,
             ILogger<OrderController> logger
         )
         {
             _bus = bus ?? throw new ArgumentNullException(nameof(bus));
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
-            _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+            _stateReader = stateReader ?? throw new ArgumentNullException(nameof(stateReader));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -49,45 +44,31 @@ namespace WebApplication7.Controllers
         public async Task<IResult> GetOrderStatus(Guid orderId, CancellationToken cancellationToken)
         {
             var correlationId = orderId.ToString("N");
-            var sagaTypeName = typeof(SagaWithState).FullName!;
+            var sagaState = await _stateReader.GetStateAsync<SagaWithState, MySagaState>(
+                correlationId,
+                cancellationToken
+            );
 
-            var entity = await _dbContext
-                .SagaStates.AsNoTracking()
-                .Include(e => e.ProcessedMessages)
-                .FirstOrDefaultAsync(
-                    e => e.CorrelationId == correlationId && e.SagaType == sagaTypeName,
-                    cancellationToken
-                );
-
-            if (entity is null)
+            if (sagaState is null)
                 return Results.NotFound(new { orderId, status = "not-found" });
 
-            MySagaState? state = null;
-            if (entity.StateData is { Length: > 0 } payload)
-            {
-                state = _serializer.Deserialize(payload, typeof(MySagaState)) as MySagaState;
-            }
-
-            var response = new
-            {
+            var response = new OrderStatusResponse(
                 orderId,
-                sagaInstanceId = entity.InstanceId,
-                completed = entity.IsCompleted,
-                state = state is null
-                    ? null
-                    : new
-                    {
-                        state.Status,
-                        state.Foo,
-                        state.Bar,
-                        state.LastUpdated,
-                    },
-                processedMessages = entity
-                    .ProcessedMessages.OrderBy(pm => pm.When)
-                    .Select(pm => new { pm.MessageId, pm.When }),
-            };
+                sagaState.SagaInstanceId,
+                sagaState.Completed,
+                sagaState.State,
+                sagaState.ProcessedMessages
+            );
 
             return Results.Ok(response);
         }
     }
+
+    public record OrderStatusResponse(
+        Guid OrderId,
+        string SagaInstanceId,
+        bool Completed,
+        MySagaState? State,
+        IReadOnlyCollection<ProcessedMessageView> ProcessedMessages
+    );
 }

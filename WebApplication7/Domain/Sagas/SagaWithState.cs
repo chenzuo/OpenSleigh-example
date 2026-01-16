@@ -37,8 +37,7 @@ namespace WebApplication7.Domain.Sagas
             this.Context.State.Foo = 30;
             this.Context.State.Bar = "lorem ipsum loading";
 
-            Random random = new Random(1500);
-            await Task.Delay(random.Next(1000, 3000), cancellationToken); // simulate some work
+            await SimulateWorkAsync(cancellationToken);
 
             var message = new ProcessMySaga();
             this.Publish(message);
@@ -69,8 +68,7 @@ namespace WebApplication7.Domain.Sagas
                     this.Context.State.Bar
                 );
 
-            Random random = new Random(1500);
-            await Task.Delay(random.Next(1000, 3000), cancellationToken); // simulate some work
+            await SimulateWorkAsync(cancellationToken);
             var message = new MySagaCompleted();
             this.Publish(message);
         }
@@ -80,8 +78,7 @@ namespace WebApplication7.Domain.Sagas
             CancellationToken cancellationToken = default
         )
         {
-            Random random = new Random(1500);
-            await Task.Delay(random.Next(1000, 3000), cancellationToken); // simulate some work
+            await SimulateWorkAsync(cancellationToken);
             this.Context.State.Status = "Completed";
             this.Context.State.LastUpdated = DateTimeOffset.UtcNow;
             this.Context.State.Foo = 100;
@@ -102,5 +99,8 @@ namespace WebApplication7.Domain.Sagas
                     this.Context.InstanceId
                 );
         }
+
+        private static Task SimulateWorkAsync(CancellationToken cancellationToken) =>
+            Task.Delay(Random.Shared.Next(1000, 3000), cancellationToken);
     }
 }

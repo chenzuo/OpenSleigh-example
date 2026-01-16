@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using OpenSleigh;
 using OpenSleigh.Outbox;
 using OpenSleigh.Transport;
@@ -26,40 +25,47 @@ namespace WebApplication7.Infrastructure
         {
             ArgumentNullException.ThrowIfNull(outboxMessage);
 
-            using var scope = _scopeFactory.CreateScope();
-
-            var sagaRunner = scope.ServiceProvider.GetRequiredService<ISagaRunner>();
-            var descriptorsResolver =
-                scope.ServiceProvider.GetRequiredService<ISagaDescriptorsResolver>();
-
             var message =
                 outboxMessage.Message
                 ?? throw new InvalidOperationException("message payload was not found.");
-            var messageContext = ToContext((dynamic)message, outboxMessage);
 
-            //    await foreach (var descriptor in descriptorsResolver.Resolve(message))
-            //     {
-            //         await sagaRunner
-            //             .ProcessAsync(messageContext, descriptor, cancellationToken)
-            //             .ConfigureAwait(false);
-            //     }
+            using var scope = _scopeFactory.CreateScope();
+            var provider = scope.ServiceProvider;
+            var sagaRunner = provider.GetRequiredService<ISagaRunner>();
+            var descriptors = provider
+                .GetRequiredService<ISagaDescriptorsResolver>()
+                .Resolve(message);
 
-            var descriptors = descriptorsResolver.Resolve(message).ToAsyncEnumerable();
-
-            await foreach (var descriptor in descriptors)
-            {
-                if (_logger.IsEnabled(LogLevel.Information))
-                    _logger.LogInformation(
-                        "processing message {MessageId} of type {MessageType} for saga {SagaType}...",
-                        outboxMessage.MessageId,
-                        outboxMessage.MessageType,
-                        descriptor.SagaType.FullName
-                    );
-
-                await sagaRunner
-                    .ProcessAsync(messageContext, descriptor, cancellationToken)
+            var context = ToContext((dynamic)message, outboxMessage);
+            foreach (var descriptor in descriptors)
+                await ProcessDescriptorAsync(
+                        sagaRunner,
+                        context,
+                        descriptor,
+                        outboxMessage,
+                        cancellationToken
+                    )
                     .ConfigureAwait(false);
-            }
+        }
+
+        private ValueTask ProcessDescriptorAsync<TMessage>(
+            ISagaRunner sagaRunner,
+            IMessageContext<TMessage> context,
+            SagaDescriptor descriptor,
+            MessageEnvelope envelope,
+            CancellationToken cancellationToken
+        )
+            where TMessage : IMessage
+        {
+            if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation(
+                    "processing message {MessageId} of type {MessageType} for saga {SagaType}...",
+                    envelope.MessageId,
+                    envelope.MessageType,
+                    descriptor.SagaType.FullName
+                );
+
+            return sagaRunner.ProcessAsync(context, descriptor, cancellationToken);
         }
 
         private static IMessageContext<TMessage> ToContext<TMessage>(

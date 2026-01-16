@@ -1,11 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using OpenSleigh.Persistence.SQL;
 using OpenSleigh.Transport;
-using OpenSleigh.Utils;
 using WebApplication7.Domain.Messages;
 using WebApplication7.Domain.Sagas;
 using WebApplication7.Domain.States;
+using WebApplication7.Infrastructure;
 
 namespace WebApplication7.Controllers
 {
@@ -13,21 +11,41 @@ namespace WebApplication7.Controllers
     [Route("api/refunds")]
     public class RefundController : ControllerBase
     {
+        private static readonly IReadOnlyDictionary<string, string> StepAliases = new Dictionary<
+            string,
+            string
+        >(StringComparer.OrdinalIgnoreCase)
+        {
+            ["RefundRequested"] = "Reserve",
+            ["ReserveRefund"] = "Reserve",
+            ["RefundReserved"] = "Reserved",
+            ["ExecuteRefund"] = "Execute",
+        };
+
+        private static readonly IReadOnlyDictionary<
+            string,
+            Func<Guid, string, IMessage>
+        > StepPublishers = new Dictionary<string, Func<Guid, string, IMessage>>(
+            StringComparer.OrdinalIgnoreCase
+        )
+        {
+            ["Reserve"] = (orderId, correlationId) => new ReserveRefund(orderId, correlationId),
+            ["Reserved"] = (orderId, correlationId) => new RefundReserved(orderId, correlationId),
+            ["Execute"] = (orderId, correlationId) => new ExecuteRefund(orderId, correlationId),
+        };
+
         private readonly IMessageBus _bus;
-        private readonly SagaDbContext _dbContext;
-        private readonly ISerializer _serializer;
+        private readonly ISagaStateReader _stateReader;
         private readonly ILogger<RefundController> _logger;
 
         public RefundController(
             IMessageBus bus,
-            SagaDbContext dbContext,
-            ISerializer serializer,
+            ISagaStateReader stateReader,
             ILogger<RefundController> logger
         )
         {
             _bus = bus ?? throw new ArgumentNullException(nameof(bus));
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
-            _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+            _stateReader = stateReader ?? throw new ArgumentNullException(nameof(stateReader));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -43,20 +61,18 @@ namespace WebApplication7.Controllers
 
             await _bus.PublishAsync(message, cancellationToken);
 
-            if (_logger.IsEnabled(LogLevel.Information))
-                _logger.LogInformation("refund requested for order {OrderId}", orderId);
+            LogInformation("refund requested for order {OrderId}", orderId);
 
             return Results.Accepted(
                 $"/api/refunds/{correlationId}",
-                new
-                {
+                new RefundAcceptedResponse(
                     orderId,
                     correlationId,
                     dto.Amount,
                     dto.Reason,
-                    Complate = false,
-                    message = "refund-request-accepted",
-                }
+                    false,
+                    "refund-request-accepted"
+                )
             );
         }
 
@@ -71,37 +87,20 @@ namespace WebApplication7.Controllers
             var resolvedFromState = false;
 
             if (string.IsNullOrWhiteSpace(correlationId))
-                return Results.BadRequest(
-                    new
-                    {
-                        correlationId = dto.CorrelationId,
-                        Complate = false,
-                        message = "correlationId is required",
-                    }
-                );
+                return ValidationError(dto.CorrelationId, "correlationId is required");
 
-            var state = await GetSagaState(correlationId, cancellationToken);
+            var sagaView = await GetSagaStateAsync(correlationId, cancellationToken);
+            var state = sagaView?.State;
             if (state is null)
-                return Results.BadRequest(
-                    new
-                    {
-                        correlationId,
-                        Complate = false,
-                        message = "saga state not found",
-                    }
-                );
+                return ValidationError(correlationId, "saga state not found");
 
             if (string.IsNullOrWhiteSpace(step))
             {
                 var resolvedStep = state.LastFailedStep;
                 if (string.IsNullOrWhiteSpace(resolvedStep))
-                    return Results.BadRequest(
-                        new
-                        {
-                            correlationId,
-                            Complate = false,
-                            message = "step is required or last failed step not found",
-                        }
+                    return ValidationError(
+                        correlationId,
+                        "step is required or last failed step not found"
                     );
                 step = resolvedStep;
                 resolvedFromState = true;
@@ -110,55 +109,39 @@ namespace WebApplication7.Controllers
             step = NormalizeStep(step);
 
             if (!await PublishStepMessage(state.OrderId, correlationId, step, cancellationToken))
-                return Results.BadRequest(
-                    new
-                    {
-                        correlationId,
-                        Complate = false,
-                        message = "step must be Reserve, Reserved, or Execute",
-                    }
-                );
+                return ValidationError(correlationId, "step must be Reserve, Reserved, or Execute");
 
-            if (_logger.IsEnabled(LogLevel.Information))
-                _logger.LogInformation(
-                    "refund retry requested: CorrelationId={CorrelationId}, Step={Step}",
-                    correlationId,
-                    step
-                );
+            LogInformation(
+                "refund retry requested: CorrelationId={CorrelationId}, Step={Step}",
+                correlationId,
+                step
+            );
 
             return Results.Accepted(
                 $"/api/refunds/{correlationId}",
-                new
-                {
-                    correlationId,
-                    step,
-                    resolvedFromState,
-                }
+                new RefundRetryResponse(correlationId, step, resolvedFromState)
             );
         }
 
-        private async Task<RefundSagaState?> GetSagaState(
+        private async Task<SagaStateView<RefundSagaState>?> GetSagaStateAsync(
             string correlationId,
             CancellationToken cancellationToken
         )
         {
             var sagaTypeName = typeof(RefundSaga).FullName!;
 
-            if (_logger.IsEnabled(LogLevel.Information))
-                _logger.LogInformation(
-                    "Resolving saga state: CorrelationId={CorrelationId}, SagaType={SagaType}",
-                    correlationId,
-                    sagaTypeName
-                );
+            LogInformation(
+                "Resolving saga state: CorrelationId={CorrelationId}, SagaType={SagaType}",
+                correlationId,
+                sagaTypeName
+            );
 
-            var entity = await _dbContext
-                .SagaStates.AsNoTracking()
-                .FirstOrDefaultAsync(
-                    e => e.CorrelationId == correlationId && e.SagaType == sagaTypeName,
-                    cancellationToken
-                );
+            var stateView = await _stateReader.GetStateAsync<RefundSaga, RefundSagaState>(
+                correlationId,
+                cancellationToken
+            );
 
-            if (entity?.StateData is not { Length: > 0 })
+            if (stateView is null)
             {
                 _logger.LogWarning(
                     "No saga state found for CorrelationId={CorrelationId}",
@@ -167,18 +150,13 @@ namespace WebApplication7.Controllers
                 return null;
             }
 
-            var state =
-                _serializer.Deserialize(entity.StateData, typeof(RefundSagaState))
-                as RefundSagaState;
+            LogInformation(
+                "Resolved saga state: Status={Status}, LastFailedStep={LastFailedStep}",
+                stateView.State?.Status,
+                stateView.State?.LastFailedStep
+            );
 
-            if (_logger.IsEnabled(LogLevel.Information))
-                _logger.LogInformation(
-                    "Resolved saga state: Status={Status}, LastFailedStep={LastFailedStep}",
-                    state?.Status,
-                    state?.LastFailedStep
-                );
-
-            return state;
+            return stateView;
         }
 
         private async Task<bool> PublishStepMessage(
@@ -188,65 +166,33 @@ namespace WebApplication7.Controllers
             CancellationToken cancellationToken
         )
         {
-            if (_logger.IsEnabled(LogLevel.Information))
-                _logger.LogInformation(
-                    "PublishStepMessage: CorrelationId={CorrelationId}, Step='{Step}' (Length={Length})",
-                    correlationId,
-                    step,
-                    step?.Length ?? 0
-                );
-
-            if (string.Equals(step, "Reserve", StringComparison.OrdinalIgnoreCase))
-            {
-                await _bus.PublishAsync(
-                    new ReserveRefund(orderId, correlationId),
-                    cancellationToken
-                );
-                return true;
-            }
-
-            if (string.Equals(step, "Execute", StringComparison.OrdinalIgnoreCase))
-            {
-                await _bus.PublishAsync(
-                    new ExecuteRefund(orderId, correlationId),
-                    cancellationToken
-                );
-                return true;
-            }
-
-            if (string.Equals(step, "Reserved", StringComparison.OrdinalIgnoreCase))
-            {
-                await _bus.PublishAsync(
-                    new RefundReserved(orderId, correlationId),
-                    cancellationToken
-                );
-                return true;
-            }
-
-            _logger.LogWarning(
-                "Invalid step: '{Step}'. Valid steps are: Reserve, Reserved, Execute",
-                step
+            LogInformation(
+                "PublishStepMessage: CorrelationId={CorrelationId}, Step='{Step}' (Length={Length})",
+                correlationId,
+                step,
+                step?.Length ?? 0
             );
-            return false;
+
+            if (!StepPublishers.TryGetValue(step, out var factory))
+            {
+                _logger.LogWarning(
+                    "Invalid step: '{Step}'. Valid steps are: Reserve, Reserved, Execute",
+                    step
+                );
+                return false;
+            }
+
+            await _bus.PublishAsync(factory(orderId, correlationId), cancellationToken);
+            return true;
         }
 
         private static string NormalizeStep(string step)
         {
             if (string.IsNullOrWhiteSpace(step))
-                return step;
+                return string.Empty;
 
             var trimmed = step.Trim();
-
-            if (string.Equals(trimmed, "RefundRequested", StringComparison.OrdinalIgnoreCase))
-                return "Reserve";
-            if (string.Equals(trimmed, "ReserveRefund", StringComparison.OrdinalIgnoreCase))
-                return "Reserve";
-            if (string.Equals(trimmed, "RefundReserved", StringComparison.OrdinalIgnoreCase))
-                return "Reserved";
-            if (string.Equals(trimmed, "ExecuteRefund", StringComparison.OrdinalIgnoreCase))
-                return "Execute";
-
-            return trimmed;
+            return StepAliases.TryGetValue(trimmed, out var normalized) ? normalized : trimmed;
         }
 
         private static string NormalizeCorrelationId(string correlationId) =>
@@ -263,57 +209,35 @@ namespace WebApplication7.Controllers
             var correlationId = NormalizeCorrelationId(dto.CorrelationId);
 
             if (string.IsNullOrWhiteSpace(correlationId))
-                return Results.BadRequest(
-                    new
-                    {
-                        correlationId = dto.CorrelationId,
-                        Complate = false,
-                        message = "correlationId is required",
-                    }
-                );
+                return ValidationError(dto.CorrelationId, "correlationId is required");
 
-            var state = await GetSagaState(correlationId, cancellationToken);
+            var sagaView = await GetSagaStateAsync(correlationId, cancellationToken);
+            var state = sagaView?.State;
             if (state is null)
-                return Results.BadRequest(
-                    new
-                    {
-                        correlationId,
-                        Complate = false,
-                        message = "saga state not found",
-                    }
-                );
+                return ValidationError(correlationId, "saga state not found");
 
             if (string.IsNullOrWhiteSpace(dto.Step))
-                return Results.BadRequest(
-                    new
-                    {
-                        correlationId,
-                        Complate = false,
-                        message = "step is required",
-                    }
-                );
+                return ValidationError(correlationId, "step is required");
 
             await _bus.PublishAsync(
                 new RefundCompensate(state.OrderId, correlationId, dto.Step),
                 cancellationToken
             );
 
-            if (_logger.IsEnabled(LogLevel.Information))
-                _logger.LogInformation(
-                    "refund compensation requested: CorrelationId={CorrelationId}, Step={Step}",
-                    correlationId,
-                    dto.Step
-                );
+            LogInformation(
+                "refund compensation requested: CorrelationId={CorrelationId}, Step={Step}",
+                correlationId,
+                dto.Step
+            );
 
             return Results.Accepted(
                 $"/api/refunds/{correlationId}",
-                new
-                {
+                new RefundCompensateResponse(
                     correlationId,
-                    step = dto.Step,
-                    Complate = false,
-                    message = "compensation accepted",
-                }
+                    dto.Step,
+                    false,
+                    "compensation accepted"
+                )
             );
         }
 
@@ -325,66 +249,49 @@ namespace WebApplication7.Controllers
         {
             correlationId = NormalizeCorrelationId(correlationId);
             if (string.IsNullOrWhiteSpace(correlationId))
-                return Results.BadRequest(
-                    new
-                    {
-                        correlationId,
-                        Complate = false,
-                        message = "correlationId is required",
-                    }
-                );
-            var sagaTypeName = typeof(RefundSaga).FullName!;
-
-            var entity = await _dbContext
-                .SagaStates.AsNoTracking()
-                .Include(e => e.ProcessedMessages)
-                .FirstOrDefaultAsync(
-                    e => e.CorrelationId == correlationId && e.SagaType == sagaTypeName,
-                    cancellationToken
-                );
-
-            if (entity is null)
-                return Results.NotFound(
-                    new
-                    {
-                        correlationId,
-                        status = "not-found",
-                        Complate = false,
-                        message = "saga state not found",
-                    }
-                );
-
-            RefundSagaState? state = null;
-            if (entity.StateData is { Length: > 0 } payload)
-            {
-                state =
-                    _serializer.Deserialize(payload, typeof(RefundSagaState)) as RefundSagaState;
-            }
-
-            var response = new
-            {
+                return ValidationError(correlationId, "correlationId is required");
+            var sagaView = await _stateReader.GetStateAsync<RefundSaga, RefundSagaState>(
                 correlationId,
-                sagaInstanceId = entity.InstanceId,
-                Complate = entity.IsCompleted,
-                message = entity.IsCompleted ? "completed" : "in-progress",
-                state = state is null
-                    ? null
-                    : new
-                    {
-                        state.CorrelationId,
-                        state.Status,
-                        state.LastFailedStep,
-                        state.Amount,
-                        state.Reason,
-                        state.LastUpdated,
-                        state.OrderId,
-                    },
-                processedMessages = entity
-                    .ProcessedMessages.OrderBy(pm => pm.When)
-                    .Select(pm => new { pm.MessageId, pm.When }),
-            };
+                cancellationToken
+            );
+
+            if (sagaView is null)
+                return NotFoundResponse(correlationId, "saga state not found");
+
+            var summary = sagaView.State is null
+                ? null
+                : new RefundStateSummary(
+                    sagaView.State.CorrelationId,
+                    sagaView.State.Status,
+                    sagaView.State.LastFailedStep,
+                    sagaView.State.Amount,
+                    sagaView.State.Reason,
+                    sagaView.State.LastUpdated,
+                    sagaView.State.OrderId
+                );
+
+            var response = new RefundStatusResponse(
+                correlationId,
+                sagaView.SagaInstanceId,
+                sagaView.Completed,
+                sagaView.Completed ? "completed" : "in-progress",
+                summary,
+                sagaView.ProcessedMessages
+            );
 
             return Results.Ok(response);
+        }
+
+        private static IResult ValidationError(string? correlationId, string message) =>
+            Results.BadRequest(new ApiError(correlationId, false, message));
+
+        private static IResult NotFoundResponse(string correlationId, string message) =>
+            Results.NotFound(new ApiError(correlationId, false, message, "not-found"));
+
+        private void LogInformation(string message, params object?[] args)
+        {
+            if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation(message, args);
         }
     }
 
@@ -393,4 +300,48 @@ namespace WebApplication7.Controllers
     public record RefundRetryRequestDto(string CorrelationId, string? Step);
 
     public record RefundCompensateRequestDto(string CorrelationId, string Step);
+
+    public record RefundAcceptedResponse(
+        Guid OrderId,
+        string CorrelationId,
+        decimal Amount,
+        string Reason,
+        bool Complate,
+        string Message
+    );
+
+    public record RefundRetryResponse(string CorrelationId, string Step, bool ResolvedFromState);
+
+    public record RefundCompensateResponse(
+        string CorrelationId,
+        string Step,
+        bool Complate,
+        string Message
+    );
+
+    public record RefundStatusResponse(
+        string CorrelationId,
+        string SagaInstanceId,
+        bool Complate,
+        string Message,
+        RefundStateSummary? State,
+        IReadOnlyCollection<ProcessedMessageView> ProcessedMessages
+    );
+
+    public record RefundStateSummary(
+        string? CorrelationId,
+        string Status,
+        string? LastFailedStep,
+        decimal Amount,
+        string? Reason,
+        DateTimeOffset LastUpdated,
+        Guid OrderId
+    );
+
+    public record ApiError(
+        string? CorrelationId,
+        bool Complate,
+        string Message,
+        string? Status = null
+    );
 }
