@@ -52,11 +52,13 @@ namespace WebApplication7.Infrastructure
             ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
             var sagaTypeName = typeof(TSaga).FullName!;
-            _logger.LogDebug(
-                "Fetching saga state: CorrelationId={CorrelationId}, SagaType={SagaType}",
-                correlationId,
-                sagaTypeName
-            );
+
+            if (_logger.IsEnabled(LogLevel.Debug))
+                _logger.LogDebug(
+                    "Fetching saga state: CorrelationId={CorrelationId}, SagaType={SagaType}",
+                    correlationId,
+                    sagaTypeName
+                );
 
             var entity = await _dbContext
                 .SagaStates.AsNoTracking()
