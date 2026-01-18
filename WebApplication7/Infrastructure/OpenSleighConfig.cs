@@ -34,13 +34,16 @@ namespace WebApplication7.Infrastructure
             services.AddSingleton<IMessageProcessor, ScopedMessageProcessor>();
             services.AddScoped<ISagaStateReader, SagaStateReader>();
 
+            services.Configure<PartitionedSubscriberOptions>(
+                configuration.GetSection("PartitionedSubscriber")
+            );
+
             // 显式替换IMessageSubscriber，以使用分区内存订阅者
             // services.Replace(
             //     ServiceDescriptor.Singleton<IMessageSubscriber, PartitionedInMemorySubscriber>()
             // );
 
             // 配置分区内存订阅者
-            var partitions = configuration.GetValue<int>("PartitionedSubscriber:Partitions", 8);
             services.Replace(
                 ServiceDescriptor.Singleton<IMessageSubscriber>(
                     sp => new PartitionedInMemorySubscriber(
@@ -48,7 +51,7 @@ namespace WebApplication7.Infrastructure
                         sp.GetRequiredService<ChannelReader<MessageEnvelope>>(),
                         sp.GetRequiredService<ILogger<PartitionedInMemorySubscriber>>(),
                         sp.GetRequiredService<IPublisher>(),
-                        partitions
+                        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<PartitionedSubscriberOptions>>()
                     )
                 )
             );

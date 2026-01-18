@@ -173,7 +173,10 @@ namespace WebApplication7.Controllers
                 step?.Length ?? 0
             );
 
-            if (!StepPublishers.TryGetValue(step, out var factory))
+            if (
+                string.IsNullOrWhiteSpace(step)
+                || !StepPublishers.TryGetValue(step, out var factory)
+            )
             {
                 _logger.LogWarning(
                     "Invalid step: '{Step}'. Valid steps are: Reserve, Reserved, Execute",
