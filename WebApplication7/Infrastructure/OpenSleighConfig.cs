@@ -32,6 +32,7 @@ namespace WebApplication7.Infrastructure
             });
 
             services.AddSingleton<IMessageProcessor, ScopedMessageProcessor>();
+            services.AddSingleton<IResultMessageProcessor, ResultMessageProcessor>();
             services.AddScoped<ISagaStateReader, SagaStateReader>();
 
             services.Configure<PartitionedSubscriberOptions>(
@@ -47,7 +48,7 @@ namespace WebApplication7.Infrastructure
             services.Replace(
                 ServiceDescriptor.Singleton<IMessageSubscriber>(
                     sp => new PartitionedInMemorySubscriber(
-                        sp.GetRequiredService<IMessageProcessor>(),
+                        sp.GetRequiredService<IResultMessageProcessor>(),
                         sp.GetRequiredService<ChannelReader<MessageEnvelope>>(),
                         sp.GetRequiredService<ILogger<PartitionedInMemorySubscriber>>(),
                         sp.GetRequiredService<IPublisher>(),

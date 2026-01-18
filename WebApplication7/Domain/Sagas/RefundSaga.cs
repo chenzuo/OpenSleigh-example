@@ -33,6 +33,7 @@ namespace WebApplication7.Domain.Sagas
             Context.State.Amount = ctx.Message.Amount;
             Context.State.Reason = ctx.Message.Reason;
             Context.State.Status = "Requested";
+            Context.State.LastFailedStep = null;
             Context.State.LastUpdated = DateTimeOffset.UtcNow;
 
             if (_logger.IsEnabled(LogLevel.Information))
@@ -61,6 +62,7 @@ namespace WebApplication7.Domain.Sagas
         )
         {
             Context.State.Status = "ReserveRequested";
+            Context.State.LastFailedStep = null;
             Context.State.LastUpdated = DateTimeOffset.UtcNow;
 
             if (_logger.IsEnabled(LogLevel.Information))
@@ -84,6 +86,7 @@ namespace WebApplication7.Domain.Sagas
         )
         {
             Context.State.Status = "Reserved";
+            Context.State.LastFailedStep = null;
             Context.State.LastUpdated = DateTimeOffset.UtcNow;
 
             if (_logger.IsEnabled(LogLevel.Information))
@@ -107,6 +110,7 @@ namespace WebApplication7.Domain.Sagas
         )
         {
             Context.State.Status = "Executing";
+            Context.State.LastFailedStep = null;
             Context.State.LastUpdated = DateTimeOffset.UtcNow;
 
             if (_logger.IsEnabled(LogLevel.Information))
@@ -130,6 +134,7 @@ namespace WebApplication7.Domain.Sagas
         )
         {
             Context.State.Status = "Completed";
+            Context.State.LastFailedStep = null;
             Context.State.LastUpdated = DateTimeOffset.UtcNow;
 
             if (_logger.IsEnabled(LogLevel.Information))
@@ -146,6 +151,7 @@ namespace WebApplication7.Domain.Sagas
         )
         {
             Context.State.Status = "Compensated";
+            Context.State.LastFailedStep = null;
             Context.State.LastUpdated = DateTimeOffset.UtcNow;
 
             if (_logger.IsEnabled(LogLevel.Information))
@@ -188,7 +194,7 @@ namespace WebApplication7.Domain.Sagas
 
         private static Task WaitRandomDelayAsync(CancellationToken cancellationToken)
         {
-            var delayMilliseconds = Random.Shared.Next(1000, 5001);
+            var delayMilliseconds = Random.Shared.Next(300, 2000);
             return Task.Delay(delayMilliseconds, cancellationToken);
         }
     }

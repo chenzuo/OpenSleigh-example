@@ -94,6 +94,15 @@ namespace WebApplication7.Controllers
             if (state is null)
                 return ValidationError(correlationId, "saga state not found");
 
+            if (string.Equals(state.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Retry ignored because saga is completed: CorrelationId={CorrelationId}",
+                    correlationId
+                );
+                return ValidationError(correlationId, "saga already completed");
+            }
+
             if (string.IsNullOrWhiteSpace(step))
             {
                 var resolvedStep = state.LastFailedStep;
