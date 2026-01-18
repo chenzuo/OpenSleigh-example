@@ -1,3 +1,5 @@
+using System.Threading.Channels;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenSleigh.DependencyInjection;
 using OpenSleigh.InMemory;
 using OpenSleigh.Outbox;
@@ -32,6 +34,24 @@ namespace WebApplication7.Infrastructure
             services.AddSingleton<IMessageProcessor, ScopedMessageProcessor>();
             services.AddScoped<ISagaStateReader, SagaStateReader>();
 
+            // 显式替换IMessageSubscriber，以使用分区内存订阅者
+            // services.Replace(
+            //     ServiceDescriptor.Singleton<IMessageSubscriber, PartitionedInMemorySubscriber>()
+            // );
+
+            // 配置分区内存订阅者
+            var partitions = configuration.GetValue<int>("PartitionedSubscriber:Partitions", 8);
+            services.Replace(
+                ServiceDescriptor.Singleton<IMessageSubscriber>(
+                    sp => new PartitionedInMemorySubscriber(
+                        sp.GetRequiredService<IMessageProcessor>(),
+                        sp.GetRequiredService<ChannelReader<MessageEnvelope>>(),
+                        sp.GetRequiredService<ILogger<PartitionedInMemorySubscriber>>(),
+                        sp.GetRequiredService<IPublisher>(),
+                        partitions
+                    )
+                )
+            );
             return services;
         }
     }
