@@ -4,6 +4,9 @@ using OpenSleigh.Utils;
 
 namespace WebApplication7.Infrastructure
 {
+    /// <summary>
+    /// Reads the state of a saga instance.
+    /// </summary>
     public interface ISagaStateReader
     {
         Task<SagaStateView<TState>?> GetStateAsync<TSaga, TState>(
@@ -70,11 +73,12 @@ namespace WebApplication7.Infrastructure
 
             if (entity is null)
             {
-                _logger.LogDebug(
-                    "Saga state not found: CorrelationId={CorrelationId}, SagaType={SagaType}",
-                    correlationId,
-                    sagaTypeName
-                );
+                if (_logger.IsEnabled(LogLevel.Debug))
+                    _logger.LogDebug(
+                        "Saga state not found: CorrelationId={CorrelationId}, SagaType={SagaType}",
+                        correlationId,
+                        sagaTypeName
+                    );
                 return null;
             }
 
