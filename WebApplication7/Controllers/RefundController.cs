@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using OpenSleigh.Transport;
 using WebApplication7.Domain.Messages;
 using WebApplication7.Domain.Sagas;
@@ -59,21 +60,27 @@ namespace WebApplication7.Controllers
             var correlationId = Guid.NewGuid().ToString("N");
             var message = new RefundRequested(orderId, correlationId, dto.Amount, dto.Reason);
 
-            await _bus.PublishAsync(message, cancellationToken);
+            var result = await _bus.PublishAsync(message, cancellationToken);
 
-            LogInformation("refund requested for order {OrderId}", orderId);
+            if (
+                result == OpenSleigh.Outbox.OutboxAppendResult.Success
+                && _logger.IsEnabled(LogLevel.Information)
+            )
+                _logger.LogInformation("refund requested for order {OrderId}", orderId);
 
-            return Results.Accepted(
-                $"/api/refunds/{correlationId}",
-                new RefundAcceptedResponse(
-                    orderId,
-                    correlationId,
-                    dto.Amount,
-                    dto.Reason,
-                    false,
-                    "refund-request-accepted"
-                )
-            );
+            if (result == OpenSleigh.Outbox.OutboxAppendResult.Success)
+                return Results.Accepted(
+                    $"/api/refunds/{correlationId}",
+                    new RefundAcceptedResponse(
+                        orderId,
+                        correlationId,
+                        dto.Amount,
+                        dto.Reason,
+                        false,
+                        "refund-request-accepted"
+                    )
+                );
+            return Results.BadRequest(result);
         }
 
         [HttpPost("retry")]
@@ -120,11 +127,12 @@ namespace WebApplication7.Controllers
             if (!await PublishStepMessage(state.OrderId, correlationId, step, cancellationToken))
                 return ValidationError(correlationId, "step must be Reserve, Reserved, or Execute");
 
-            LogInformation(
-                "refund retry requested: CorrelationId={CorrelationId}, Step={Step}",
-                correlationId,
-                step
-            );
+            if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation(
+                    "refund retry requested: CorrelationId={CorrelationId}, Step={Step}",
+                    correlationId,
+                    step
+                );
 
             return Results.Accepted(
                 $"/api/refunds/{correlationId}",
@@ -139,11 +147,12 @@ namespace WebApplication7.Controllers
         {
             var sagaTypeName = typeof(RefundSaga).FullName!;
 
-            LogInformation(
-                "Resolving saga state: CorrelationId={CorrelationId}, SagaType={SagaType}",
-                correlationId,
-                sagaTypeName
-            );
+            if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation(
+                    "Resolving saga state: CorrelationId={CorrelationId}, SagaType={SagaType}",
+                    correlationId,
+                    sagaTypeName
+                );
 
             var stateView = await _stateReader.GetStateAsync<RefundSaga, RefundSagaState>(
                 correlationId,
@@ -159,11 +168,12 @@ namespace WebApplication7.Controllers
                 return null;
             }
 
-            LogInformation(
-                "Resolved saga state: Status={Status}, LastFailedStep={LastFailedStep}",
-                stateView.State?.Status,
-                stateView.State?.LastFailedStep
-            );
+            if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation(
+                    "Resolved saga state: Status={Status}, LastFailedStep={LastFailedStep}",
+                    stateView.State?.Status,
+                    stateView.State?.LastFailedStep
+                );
 
             return stateView;
         }
@@ -175,27 +185,32 @@ namespace WebApplication7.Controllers
             CancellationToken cancellationToken
         )
         {
-            LogInformation(
-                "PublishStepMessage: CorrelationId={CorrelationId}, Step='{Step}' (Length={Length})",
-                correlationId,
-                step,
-                step?.Length ?? 0
-            );
+            if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation(
+                    "PublishStepMessage: CorrelationId={CorrelationId}, Step='{Step}' (Length={Length})",
+                    correlationId,
+                    step,
+                    step?.Length ?? 0
+                );
 
             if (
                 string.IsNullOrWhiteSpace(step)
                 || !StepPublishers.TryGetValue(step, out var factory)
             )
             {
-                _logger.LogWarning(
-                    "Invalid step: '{Step}'. Valid steps are: Reserve, Reserved, Execute",
-                    step
-                );
+                if (_logger.IsEnabled(LogLevel.Warning))
+                    _logger.LogWarning(
+                        "Invalid step: '{Step}'. Valid steps are: Reserve, Reserved, Execute",
+                        step
+                    );
                 return false;
             }
 
-            await _bus.PublishAsync(factory(orderId, correlationId), cancellationToken);
-            return true;
+            var result = await _bus.PublishAsync(
+                factory(orderId, correlationId),
+                cancellationToken
+            );
+            return OpenSleigh.Outbox.OutboxAppendResult.Success == result;
         }
 
         private static string NormalizeStep(string step)
@@ -236,12 +251,12 @@ namespace WebApplication7.Controllers
                 cancellationToken
             );
 
-            LogInformation(
-                "refund compensation requested: CorrelationId={CorrelationId}, Step={Step}",
-                correlationId,
-                dto.Step
-            );
-
+            if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation(
+                    "refund compensation requested: CorrelationId={CorrelationId}, Step={Step}",
+                    correlationId,
+                    dto.Step
+                );
             return Results.Accepted(
                 $"/api/refunds/{correlationId}",
                 new RefundCompensateResponse(
