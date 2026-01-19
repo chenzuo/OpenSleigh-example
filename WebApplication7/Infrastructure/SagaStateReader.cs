@@ -82,10 +82,13 @@ namespace WebApplication7.Infrastructure
                 return null;
             }
 
-            TState? state = null;
-            if (entity.StateData is { Length: > 0 })
-                state = _serializer.Deserialize(entity.StateData, typeof(TState)) as TState;
+            // TState? state = null;
+            // if (entity.StateData is { Length: > 0 })
+            //     state = _serializer.Deserialize(entity.StateData, typeof(TState)) as TState;
 
+            TState? state = entity.StateData is { Length: > 0 }
+                ? _serializer.Deserialize<TState>(entity.StateData) as TState
+                : null;
             var processed = entity
                 .ProcessedMessages.OrderBy(pm => pm.When)
                 .Select(pm => new ProcessedMessageView(pm.MessageId, pm.When))
