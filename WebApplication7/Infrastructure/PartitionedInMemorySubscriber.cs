@@ -192,15 +192,16 @@ namespace WebApplication7.Infrastructure
             await _publisher.PublishAsync(msg, ct).ConfigureAwait(false);
             Interlocked.Increment(ref _requeued);
 
-            _logger.LogWarning(
-                "requeued {MessageId} after lock retries. delay={DelayMs}ms processed={Processed} lockConflicts={LockConflicts} failed={Failed} requeued={Requeued}",
-                msg.MessageId,
-                delay.TotalMilliseconds,
-                Interlocked.Read(ref _processed),
-                Interlocked.Read(ref _lockConflicts),
-                Interlocked.Read(ref _failed),
-                Interlocked.Read(ref _requeued)
-            );
+            if (_logger.IsEnabled(LogLevel.Warning))
+                _logger.LogWarning(
+                    "requeued {MessageId} after lock retries. delay={DelayMs}ms processed={Processed} lockConflicts={LockConflicts} failed={Failed} requeued={Requeued}",
+                    msg.MessageId,
+                    delay.TotalMilliseconds,
+                    Interlocked.Read(ref _processed),
+                    Interlocked.Read(ref _lockConflicts),
+                    Interlocked.Read(ref _failed),
+                    Interlocked.Read(ref _requeued)
+                );
         }
 
         private static async ValueTask<SemaphoreReleaser> WaitReleaserAsync(

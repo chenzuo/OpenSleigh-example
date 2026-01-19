@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using OpenSleigh.Transport;
 using WebApplication7.Domain.Messages;
 using WebApplication7.Domain.Sagas;
