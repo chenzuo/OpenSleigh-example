@@ -87,8 +87,9 @@ namespace WebApplication7.Infrastructure
             //     state = _serializer.Deserialize(entity.StateData, typeof(TState)) as TState;
 
             TState? state = entity.StateData is { Length: > 0 }
-                ? _serializer.Deserialize<TState>(entity.StateData) as TState
+                ? _serializer.Deserialize<TState>(entity.StateData)
                 : null;
+
             var processed = entity
                 .ProcessedMessages.OrderBy(pm => pm.When)
                 .Select(pm => new ProcessedMessageView(pm.MessageId, pm.When))
